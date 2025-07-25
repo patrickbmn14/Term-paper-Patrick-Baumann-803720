@@ -1,25 +1,25 @@
 
 # 0. Clear environment, console, and loaded plots
-rm(list = ls())        # Remove all objects from the environment
-cat("\014")            # Clear the console (equivalent to Ctrl+L)
-if (!is.null(dev.list())) dev.off()  # Close any open graphics devices (plots)
+rm(list = ls())                                                                 # Remove all objects from the environment
+cat("\014")                                                                     # Clear the console (equivalent to Ctrl+L)
+if (!is.null(dev.list())) dev.off()                                             # Close any open graphics devices (plots)
 
 # 1. Install required packages (only needed once)
-install.packages("quantmod", "rugarch")     # quantmod: for downloading and analyzing market data, rugarch: for fitting GARCH models
-install.packages("RQuantLib")               # RQuantLib: for option pricing (e.g. Black-Scholes)
+install.packages("quantmod", "rugarch")                                         # quantmod: for downloading and analyzing market data, rugarch: for fitting GARCH models
+install.packages("RQuantLib")                                                   # RQuantLib: for option pricing (e.g. Black-Scholes)
 
 # 2. Load necessary packages
-library(quantmod)     # For retrieving financial data from Yahoo Finance
-library(rugarch)      # For estimating volatility using GARCH models
-library(RQuantLib)    # For pricing options using models like Black-Scholes
+library(quantmod)                                                               # For retrieving financial data from Yahoo Finance
+library(rugarch)                                                                # For estimating volatility using GARCH models
+library(RQuantLib)                                                              # For pricing options using models like Black-Scholes
 
 # 3. Load Porsche stock data
-getSymbols("P911.DE", src = "yahoo", from = "2021-01-01", auto.assign = TRUE)  # Download Porsche stock data from Yahoo Finance starting Jan 1, 2021
-porsche = na.omit(Cl(P911.DE))  # Extract closing prices and remove missing values (NAs)
+getSymbols("P911.DE", src = "yahoo", from = "2022-09-29", auto.assign = TRUE)   # Download Porsche stock data from Yahoo Finance starting Jan 1, 2021
+porsche = na.omit(Cl(P911.DE))                                                  # Extract closing prices and remove missing values (NAs)
 
 # 4. Calculate log returns
-log_returns = diff(log(porsche))[-1]        # Compute daily log returns (difference of logarithmic prices), skip first NA
-log_returns = na.omit(as.numeric(log_returns))  # Convert to numeric and remove any remaining NAs
+log_returns = diff(log(porsche))[-1]                                            # Compute daily log returns (difference of logarithmic prices), skip first NA
+log_returns = na.omit(as.numeric(log_returns))                                  # Convert to numeric and remove any remaining NAs
 
 # Plot daily log returns
 plot(index(porsche)[-1], log_returns, type = "l", col = "darkgreen",
@@ -33,32 +33,32 @@ abline(v = mean(log_returns), col = "red", lwd = 2)
 
 
 # 5. Calculate historical (annualized) volatility
-hist_vol_annualized = sd(log_returns) * sqrt(365)  # Standard deviation of daily returns scaled to annual volatility
+hist_vol_annualized = sd(log_returns) * sqrt(365)                               # Standard deviation of daily returns scaled to annual volatility
 cat("Annualized Historical Volatility:", round(hist_vol_annualized * 100, 2), "%\n")  # Print the result in percent
 
 # 6. Specify and estimate GARCH(1,1) model
 garch_spec = ugarchspec(
-  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),  # Define standard GARCH(1,1) model
-  mean.model = list(armaOrder = c(0, 0)),                         # No ARMA component in the mean equation (assumes constant mean)
-  distribution.model = "norm"                                     # Assumes normally distributed errors
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),                # Define standard GARCH(1,1) model
+  mean.model = list(armaOrder = c(0, 0)),                                       # No ARMA component in the mean equation (assumes constant mean)
+  distribution.model = "norm"                                                   # Assumes normally distributed errors
 )
 garch_fit = ugarchfit(spec = garch_spec, data = log_returns, solver = "hybrid", fit.control = list(scale = 1))  # Fit the model using hybrid solver
 
 # If model converges:
 if (garch_fit@fit$convergence == 0) {
-  garch_forecast = ugarchforecast(garch_fit, n.ahead = 1)            # Forecast 1 day ahead volatility
-  sigma_tomorrow = sigma(garch_forecast)[1]                          # Extract forecasted standard deviation for tomorrow
-  vol_tomorrow_annual = sigma_tomorrow * sqrt(365)                  # Annualize the forecasted volatility
+  garch_forecast = ugarchforecast(garch_fit, n.ahead = 1)                       # Forecast 1 day ahead volatility
+  sigma_tomorrow = sigma(garch_forecast)[1]                                     # Extract forecasted standard deviation for tomorrow
+  vol_tomorrow_annual = sigma_tomorrow * sqrt(365)                              # Annualize the forecasted volatility
   cat("Forecasted Annualized Volatility for Tomorrow (GARCH):", round(vol_tomorrow_annual * 100, 2), "%\n")  # Print result
 } else {
-  warning("GARCH(1,1) model did not converge.")                      # If fitting fails, show warning
+  warning("GARCH(1,1) model did not converge.")                                 # If fitting fails, show warning
   sigma_tomorrow = NA
   vol_tomorrow_annual = NA
 }
 
 # 7. Specify and estimate ARCH(1) model
 arch_spec = ugarchspec(
-  variance.model = list(model = "sGARCH", garchOrder = c(1, 0)),  # Define ARCH(1) model as special case of GARCH(1,0)
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 0)),                # Define ARCH(1) model as special case of GARCH(1,0)
   mean.model = list(armaOrder = c(0, 0)),
   distribution.model = "norm"
 )
@@ -66,18 +66,18 @@ arch_fit = ugarchfit(spec = arch_spec, data = log_returns, solver = "hybrid", fi
 
 # If model converges:
 if (arch_fit@fit$convergence == 0) {
-  arch_forecast = ugarchforecast(arch_fit, n.ahead = 1)              # Forecast 1 day ahead volatility
-  sigma_tomorrow_arch = sigma(arch_forecast)[1]                     # Extract forecasted standard deviation for ARCH(1)
-  vol_tomorrow_annual_arch = sigma_tomorrow_arch * sqrt(365)       # Annualize the forecasted volatility
+  arch_forecast = ugarchforecast(arch_fit, n.ahead = 1)                         # Forecast 1 day ahead volatility
+  sigma_tomorrow_arch = sigma(arch_forecast)[1]                                 # Extract forecasted standard deviation for ARCH(1)
+  vol_tomorrow_annual_arch = sigma_tomorrow_arch * sqrt(365)                    # Annualize the forecasted volatility
   cat("Forecasted Annualized Volatility for Tomorrow (ARCH):", round(vol_tomorrow_annual_arch * 100, 2), "%\n")
 } else {
   warning("ARCH(1) model did not converge. Trying tseries::garch as fallback...")  # Print warning if model did not converge
-  # Optional: fallback using the tseries package is commented out
+    # fallback using the tseries package is commented out
   sigma_tomorrow_arch = NA
   vol_tomorrow_annual_arch = NA
 }
 
-# 7.5 (Optional): Plot Conditional Volatility from GARCH and ARCH Models
+# 7.5 Plot Conditional Volatility from GARCH and ARCH Models
 # Get conditional standard deviations (volatility) from fitted models
 garch_vol_series = sigma(garch_fit)
 arch_vol_series = sigma(arch_fit)
@@ -94,9 +94,9 @@ legend("topright", legend = c("GARCH(1,1)", "ARCH(1)"), col = c("blue", "red"), 
 # 8. Prepare for Black-Scholes option pricing
 S = as.numeric(last(porsche))      # Get the latest available Porsche stock price (spot price)
 K = S * 1.10                       # Set strike price to 10% above the spot price
-maturity_days = 180               # Option expires in 180 days
-days_in_year = 365                # Number of days in a year (for scaling)
-rf_rate = 0.0249                  # Annualized risk-free interest rate (e.g. 2.49%)
+maturity_days = 180                # Option expires in 180 days
+days_in_year = 365                 # Number of days in a year (for scaling)
+rf_rate = 0.0249                   # Annualized risk-free interest rate (e.g. 2.49%)
 
 cat("Latest Porsche closing price:", round(S, 2), "EUR\n")             # Print spot price
 cat("S (Spot Price):", round(S, 2), "EUR\n")                           # Print again (redundant)
@@ -133,3 +133,4 @@ if (!is.na(vol_tomorrow_annual_arch)) {
 } else {
   cat("Could not compute option price with ARCH volatility (NA volatility).\n")  # Error message if volatility is NA
 }
+
